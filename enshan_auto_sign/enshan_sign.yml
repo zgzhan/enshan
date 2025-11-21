@@ -1,0 +1,42 @@
+name: 恩山论坛自动签到
+
+on:
+  schedule:
+    # 每天UTC时间0点执行 (北京时间8点)
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout代码
+        uses: actions/checkout@v3
+      
+      - name: 设置Python环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+      
+      - name: 执行签到脚本
+        env:
+          ENSHAN_COOKIE: ${{ secrets.ENSHAN_COOKIE }}
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+        run: python enshan_playwright.py
+      
+      - name: 上传日志
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: sign-logs
+          path: |
+            *.log
+            *.txt
+          retention-days: 7

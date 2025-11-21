@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  enshan-sign:
+    build: .
+    container_name: enshan-auto-sign
+    environment:
+      - ENSHAN_COOKIE=${ENSHAN_COOKIE}
+      - SERVERCHAN_KEY=${SERVERCHAN_KEY}
+    restart: unless-stopped
+    # 可以配合cron使用,或者使用以下配置定时运行
+    # deploy:
+    #   restart_policy:
+    #     condition: on-failure
+    #     delay: 86400s  # 24小时后重启
