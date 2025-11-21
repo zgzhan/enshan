@@ -329,7 +329,8 @@ class EnShanPlaywright:
     def main(self):
         """主函数"""
         if not self.cookie:
-            return "未找到恩山论坛的 Cookie,请设置 ENSHAN_COOKIE 环境变量。"
+            print("未找到恩山论坛的 Cookie,请设置 ENSHAN_COOKIE 环境变量。")
+            return
         
         try:
             # 执行签到
@@ -348,18 +349,17 @@ class EnShanPlaywright:
             if self.serverchan_key:
                 self.push_notification(msg)
             
-            return msg
+            print(msg)
             
         except Exception as e:
             error_msg = f"执行出错: {str(e)}"
             if self.serverchan_key:
                 self.push_notification(error_msg)
-            return error_msg
+            print(error_msg)
 
 
 if __name__ == "__main__":
-    result = EnShanPlaywright().main()
-    print(result)
+    EnShanPlaywright().main()
 EOF
           # 运行脚本
           python enshan_playwright.py
