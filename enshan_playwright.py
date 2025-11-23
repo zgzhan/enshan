@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-恩山无线论坛自动签到脚本 (Playwright最终优化版)
+恩山无线论坛自动签到脚本 (Playwright最终版 - 绕过积分检查)
 """
 
 import os
@@ -18,7 +18,7 @@ urllib3.disable_warnings()
 
 
 class EnShanPlaywright:
-    """恩山论坛自动签到类 (Playwright最终优化版)"""
+    """恩山论坛自动签到类 (Playwright最终版)"""
     
     name = "恩山无线论坛"
     
@@ -84,10 +84,8 @@ class EnShanPlaywright:
         try:
             print("检测到验证码,正在尝试破解...")
             
-            # 等待验证码加载
             await asyncio.sleep(3)
             
-            # 尝试查找滑块元素 - 根据实际页面调整选择器
             slider_selectors = [
                 '[class*="slider"]',
                 '[class*="slide-verify"]',
@@ -106,7 +104,6 @@ class EnShanPlaywright:
                 except:
                     continue
             
-            # 默认使用坐标滑动 (更通用)
             start_x = 430
             start_y = 464
             
@@ -120,11 +117,9 @@ class EnShanPlaywright:
             await self.page.mouse.down()
             await asyncio.sleep(0.2)
             
-            # 生成滑动距离和轨迹
             distance = random.randint(220, 260)
             track = self.get_track(distance)
             
-            # 执行滑动
             current_x = start_x
             for move in track:
                 current_x += move
@@ -137,7 +132,6 @@ class EnShanPlaywright:
             await asyncio.sleep(0.5)
             await self.page.mouse.up()
             
-            # 等待验证结果
             await asyncio.sleep(3)
             
             content = await self.page.content()
@@ -151,27 +145,6 @@ class EnShanPlaywright:
         except Exception as e:
             print(f"滑块验证失败: {e}")
             return False
-            
-    async def get_credit_info(self):
-        """访问个人中心获取积分信息"""
-        try:
-            print("正在访问个人中心获取积分信息...")
-            # 增加超时时间，防止网络延迟
-            await self.page.goto("https://www.right.com.cn/FORUM/home.php?mod=spacecp&ac=credit&showcredit=1", timeout=60000, wait_until='networkidle' )
-            await asyncio.sleep(3)
-            
-            page_source = await self.page.content()
-            
-            coin_match = re.search(r"恩山币[:\s]*</em>([^&<]+)", page_source)
-            point_match = re.search(r"积分[:\s]*</em>([^<]+)", page_source)
-            
-            coin = coin_match.group(1).strip() if coin_match else "未知"
-            point = point_match.group(1).strip() if point_match else "未知"
-            
-            return coin, point
-        except Exception as e:
-            print(f"获取积分信息失败: {e}")
-            return "未知", "未知"
             
     async def sign_in(self):
         """执行签到"""
@@ -210,7 +183,6 @@ class EnShanPlaywright:
                 # 检查是否需要验证码
                 content = await self.page.content()
                 if "安全验证" in content or "Security Verification" in content:
-                    # 尝试破解验证码,最多3次
                     for i in range(3):
                         print(f"第 {i+1} 次尝试破解验证码...")
                         if await self.solve_slider_captcha():
@@ -220,63 +192,54 @@ class EnShanPlaywright:
                             await self.page.reload()
                             await asyncio.sleep(3)
                 
-                # 等待页面加载
                 await asyncio.sleep(3)
+                
+                # 检查签到前页面上是否有“签到”按钮
+                sign_button_selector = 'button:has-text("签到")'
+                initial_button = await self.page.query_selector(sign_button_selector)
+                
+                if not initial_button:
+                    # 如果没有签到按钮，说明已经签到过了
+                    print("页面上没有签到按钮，判断为已签到。")
+                    return {
+                        "status": "success",
+                        "message": "已签到 (页面无签到按钮)"
+                    }
                 
                 # 尝试点击签到按钮
-                sign_selectors = [
-                    'button:has-text("签到")',
-                    'a:has-text("签到")',
-                    '[class*="sign"]',
-                    '#sign_in'
-                ]
+                print("找到签到按钮，尝试点击...")
+                await initial_button.click()
+                print("点击签到按钮成功")
                 
-                sign_button_clicked = False
-                for selector in sign_selectors:
-                    try:
-                        buttons = await self.page.query_selector_all(selector)
-                        if buttons:
-                            await buttons[0].click()
-                            print(f"点击签到按钮成功: {selector}")
-                            sign_button_clicked = True
-                            # 增加等待时间，等待签到结果弹出或页面跳转
-                            await asyncio.sleep(5) 
-                            break
-                    except Exception as e:
-                        print(f"尝试点击 {selector} 失败: {e}")
-                        continue
+                # 增加等待时间，等待签到结果弹出或页面跳转
+                await asyncio.sleep(5) 
                 
-                # 签到后，检查页面是否有签到成功的提示（如果有的话）
-                # 恩山论坛签到成功后，页面通常会显示“您今天已经签到过了”或类似信息
-                
-                # 重新访问签到页面，检查是否已经签到
-                await self.page.goto("https://www.right.com.cn/FORUM/erling_qd-sign_in.html", wait_until='networkidle' )
+                # 再次检查页面上是否有“签到”按钮
+                await self.page.reload()
                 await asyncio.sleep(3)
                 
-                content = await self.page.content()
+                final_button = await self.page.query_selector(sign_button_selector)
                 
-                # 检查是否已经签到
-                if "您今天已经签到过了" in content or "您今日已签到" in content:
-                    print("页面显示已签到，操作成功。")
+                if not final_button:
+                    print("签到后页面上签到按钮消失，判断签到成功。")
                     sign_status = "success"
-                elif "签到" in content and sign_button_clicked:
-                    # 如果点击了签到按钮，但页面仍然显示“签到”按钮，说明签到失败
-                    print("点击签到按钮后，页面仍显示签到按钮，签到可能失败。")
-                    sign_status = "failed"
+                    message = "签到成功 (按钮消失)"
                 else:
-                    sign_status = "success" # 无法明确判断，暂定成功
+                    print("签到后页面上签到按钮仍然存在，判断签到失败。")
+                    sign_status = "failed"
+                    message = "签到失败 (按钮未消失)"
                 
-                # 获取积分信息
+                # 尝试获取积分信息 (不再依赖它判断成功)
                 coin, point = await self.get_credit_info()
                 
                 return {
                     "status": sign_status,
                     "coin": coin,
-                    "point": point
+                    "point": point,
+                    "message": message
                 }
                 
         except Exception as e:
-            # 发生任何异常时，进行截图
             if self.page:
                 await self.page.screenshot(path=self.screenshot_path)
                 print(f"发生异常，已保存截图到 {self.screenshot_path}")
@@ -318,15 +281,11 @@ class EnShanPlaywright:
             return
         
         try:
-            # 执行签到
             result = asyncio.run(self.sign_in())
             
             # 格式化消息
             if result["status"] == "success":
-                if result["coin"] != "未知":
-                    msg = f"签到操作已执行。\n恩山币: {result['coin']}\n积分: {result['point']}"
-                else:
-                    msg = result.get("message", "签到操作已执行,但无法确认积分变动。")
+                msg = f"{result['message']}\n恩山币: {result.get('coin', '未知')}\n积分: {result.get('point', '未知')}"
             else:
                 msg = result.get("message", "签到失败")
             
@@ -338,7 +297,6 @@ class EnShanPlaywright:
             print(f"::set-output name=status::{result['status']}")
             print(f"::set-output name=message::{msg}")
             
-            # 如果失败，则打印截图路径
             if result["status"] == "failed" and os.path.exists(self.screenshot_path):
                 print(f"::set-output name=screenshot_path::{self.screenshot_path}")
             
