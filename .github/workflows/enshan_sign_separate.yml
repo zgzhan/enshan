@@ -1,0 +1,44 @@
+name: 恩山论坛自动签到 (分离式)
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天 UTC 0点 (北京时间 8点)
+  workflow_dispatch: # 启用手动运行按钮
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout代码
+        uses: actions/checkout@v3
+      
+      - name: 设置Python环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: 安装依赖
+        run: |
+          pip install playwright requests
+          playwright install chromium
+          playwright install-deps chromium
+      
+      - name: 执行签到脚本
+        id: run_script # 添加ID，用于后续步骤引用输出
+        env:
+          ENSHAN_COOKIE: ${{ secrets.ENSHAN_COOKIE }}
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+        run: |
+          python enshan_playwright.py
+        # 允许脚本失败，以便执行后续的截图上传步骤
+        continue-on-error: true
+      
+      - name: 上传诊断截图
+        uses: actions/upload-artifact@v3
+        # 只有在脚本运行失败，并且脚本输出了截图路径时才执行
+        if: always() && steps.run_script.outputs.status == 'failed' && steps.run_script.outputs.screenshot_path != ''
+        with:
+          name: failure-screenshot-${{ github.run_id }}
+          path: failure_screenshot.png
+          retention-days: 7
