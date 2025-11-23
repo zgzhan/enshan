@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-恩山无线论坛自动签到脚本 (Playwright最终版 - 强制截图)
+恩山无线论坛自动签到脚本 (Playwright最终修正版 - 修正按钮判断)
 """
 
 import os
@@ -18,7 +18,7 @@ urllib3.disable_warnings()
 
 
 class EnShanPlaywright:
-    """恩山论坛自动签到类 (Playwright最终版)"""
+    """恩山论坛自动签到类 (Playwright最终修正版)"""
     
     name = "恩山无线论坛"
     
@@ -215,10 +215,18 @@ class EnShanPlaywright:
                 await asyncio.sleep(3)
                 
                 # 检查签到前页面上是否有“签到”按钮
-                sign_button_selector = 'button:has-text("签到")'
+                # 签到按钮的文本是 "Check in now"
+                sign_button_selector = 'button:has-text("Check in now")'
                 initial_button = await self.page.query_selector(sign_button_selector)
                 
-                if not initial_button:
+                # 检查是否已经签到
+                checked_in_today = await self.page.query_selector('div:has-text("Checked in today")')
+                
+                if checked_in_today:
+                    print("页面显示已签到 (Checked in today)，判断为已签到。")
+                    sign_status = "success"
+                    message = "已签到 (页面显示已签到)"
+                elif not initial_button:
                     print("页面上没有签到按钮，判断为已签到。")
                     sign_status = "success"
                     message = "已签到 (页面无签到按钮)"
@@ -231,20 +239,20 @@ class EnShanPlaywright:
                     # 增加等待时间，等待签到结果弹出或页面跳转
                     await asyncio.sleep(5) 
                     
-                    # 再次检查页面上是否有“签到”按钮
+                    # 再次检查页面是否显示“Checked in today”
                     await self.page.reload()
                     await asyncio.sleep(3)
                     
-                    final_button = await self.page.query_selector(sign_button_selector)
+                    final_checked_in = await self.page.query_selector('div:has-text("Checked in today")')
                     
-                    if not final_button:
-                        print("签到后页面上签到按钮消失，判断签到成功。")
+                    if final_checked_in:
+                        print("签到后页面显示 'Checked in today'，判断签到成功。")
                         sign_status = "success"
-                        message = "签到成功 (按钮消失)"
+                        message = "签到成功 (页面显示已签到)"
                     else:
-                        print("签到后页面上签到按钮仍然存在，判断签到失败。")
+                        print("签到后页面未显示 'Checked in today'，判断签到失败。")
                         sign_status = "failed"
-                        message = "签到失败 (按钮未消失)"
+                        message = "签到失败 (页面未显示已签到)"
                 
                 # 强制截图，无论成功还是失败
                 await self.page.screenshot(path=self.screenshot_path)
