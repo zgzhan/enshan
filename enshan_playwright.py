@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-恩山无线论坛自动签到脚本 (Playwright最终修正版 - 修正按钮判断)
+恩山无线论坛自动签到脚本 (Playwright最终优化版 - 增强滑块真实性)
 """
 
 import os
@@ -18,7 +18,7 @@ urllib3.disable_warnings()
 
 
 class EnShanPlaywright:
-    """恩山论坛自动签到类 (Playwright最终修正版)"""
+    """恩山论坛自动签到类 (Playwright最终优化版)"""
     
     name = "恩山无线论坛"
     
@@ -51,7 +51,7 @@ class EnShanPlaywright:
         
     def get_track(self, distance):
         """
-        生成模拟人类滑动的轨迹
+        生成模拟人类滑动的轨迹 (增强随机性)
         :param distance: 需要滑动的距离
         :return: 轨迹列表
         """
@@ -63,9 +63,9 @@ class EnShanPlaywright:
         
         while current < distance:
             if current < mid:
-                a = 2  # 加速度
+                a = random.uniform(1.5, 2.5)  # 加速度增加随机性
             else:
-                a = -3  # 减速度
+                a = random.uniform(-3.5, -2.5)  # 减速度增加随机性
             
             v0 = v
             v = v0 + a * t
@@ -73,8 +73,9 @@ class EnShanPlaywright:
             current += move
             track.append(round(move))
         
-        # 添加随机抖动
-        for _ in range(3):
+        # 增加回退和随机抖动
+        track.append(random.randint(-5, -1)) # 模拟回退
+        for _ in range(random.randint(3, 5)):
             track.append(random.randint(-2, 2))
             
         return track
@@ -115,7 +116,7 @@ class EnShanPlaywright:
             
             await self.page.mouse.move(start_x, start_y)
             await self.page.mouse.down()
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(random.uniform(0.1, 0.3)) # 增加按下延迟
             
             distance = random.randint(220, 260)
             track = self.get_track(distance)
@@ -125,11 +126,11 @@ class EnShanPlaywright:
                 current_x += move
                 await self.page.mouse.move(
                     current_x,
-                    start_y + random.randint(-2, 2)
+                    start_y + random.randint(-3, 3) # 增加Y轴抖动
                 )
-                await asyncio.sleep(random.uniform(0.01, 0.02))
+                await asyncio.sleep(random.uniform(0.01, 0.05)) # 增加移动延迟
             
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(random.uniform(0.3, 0.7)) # 增加释放延迟
             await self.page.mouse.up()
             
             await asyncio.sleep(3)
@@ -215,7 +216,6 @@ class EnShanPlaywright:
                 await asyncio.sleep(3)
                 
                 # 检查签到前页面上是否有“签到”按钮
-                # 签到按钮的文本是 "Check in now"
                 sign_button_selector = 'button:has-text("Check in now")'
                 initial_button = await self.page.query_selector(sign_button_selector)
                 
