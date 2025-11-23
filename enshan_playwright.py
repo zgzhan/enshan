@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-恩山无线论坛自动签到脚本 (Playwright最终版 - 绕过积分检查)
+恩山无线论坛自动签到脚本 (Playwright最终版 - 强制截图)
 """
 
 import os
@@ -28,7 +28,7 @@ class EnShanPlaywright:
         self.serverchan_key = os.environ.get('SERVERCHAN_KEY')
         self.page = None
         self.browser = None
-        self.screenshot_path = "failure_screenshot.png" # 截图保存路径
+        self.screenshot_path = "final_screenshot.png" # 截图保存路径
         
     def parse_cookies(self):
         """解析Cookie字符串为列表"""
@@ -146,6 +146,26 @@ class EnShanPlaywright:
             print(f"滑块验证失败: {e}")
             return False
             
+    async def get_credit_info(self):
+        """访问个人中心获取积分信息"""
+        try:
+            print("正在访问个人中心获取积分信息...")
+            await self.page.goto("https://www.right.com.cn/FORUM/home.php?mod=spacecp&ac=credit&showcredit=1", timeout=60000, wait_until='networkidle' )
+            await asyncio.sleep(3)
+            
+            page_source = await self.page.content()
+            
+            coin_match = re.search(r"恩山币[:\s]*</em>([^&<]+)", page_source)
+            point_match = re.search(r"积分[:\s]*</em>([^<]+)", page_source)
+            
+            coin = coin_match.group(1).strip() if coin_match else "未知"
+            point = point_match.group(1).strip() if point_match else "未知"
+            
+            return coin, point
+        except Exception as e:
+            print(f"获取积分信息失败: {e}")
+            return "未知", "未知"
+            
     async def sign_in(self):
         """执行签到"""
         try:
@@ -199,35 +219,36 @@ class EnShanPlaywright:
                 initial_button = await self.page.query_selector(sign_button_selector)
                 
                 if not initial_button:
-                    # 如果没有签到按钮，说明已经签到过了
                     print("页面上没有签到按钮，判断为已签到。")
-                    return {
-                        "status": "success",
-                        "message": "已签到 (页面无签到按钮)"
-                    }
-                
-                # 尝试点击签到按钮
-                print("找到签到按钮，尝试点击...")
-                await initial_button.click()
-                print("点击签到按钮成功")
-                
-                # 增加等待时间，等待签到结果弹出或页面跳转
-                await asyncio.sleep(5) 
-                
-                # 再次检查页面上是否有“签到”按钮
-                await self.page.reload()
-                await asyncio.sleep(3)
-                
-                final_button = await self.page.query_selector(sign_button_selector)
-                
-                if not final_button:
-                    print("签到后页面上签到按钮消失，判断签到成功。")
                     sign_status = "success"
-                    message = "签到成功 (按钮消失)"
+                    message = "已签到 (页面无签到按钮)"
                 else:
-                    print("签到后页面上签到按钮仍然存在，判断签到失败。")
-                    sign_status = "failed"
-                    message = "签到失败 (按钮未消失)"
+                    # 尝试点击签到按钮
+                    print("找到签到按钮，尝试点击...")
+                    await initial_button.click()
+                    print("点击签到按钮成功")
+                    
+                    # 增加等待时间，等待签到结果弹出或页面跳转
+                    await asyncio.sleep(5) 
+                    
+                    # 再次检查页面上是否有“签到”按钮
+                    await self.page.reload()
+                    await asyncio.sleep(3)
+                    
+                    final_button = await self.page.query_selector(sign_button_selector)
+                    
+                    if not final_button:
+                        print("签到后页面上签到按钮消失，判断签到成功。")
+                        sign_status = "success"
+                        message = "签到成功 (按钮消失)"
+                    else:
+                        print("签到后页面上签到按钮仍然存在，判断签到失败。")
+                        sign_status = "failed"
+                        message = "签到失败 (按钮未消失)"
+                
+                # 强制截图，无论成功还是失败
+                await self.page.screenshot(path=self.screenshot_path)
+                print(f"已保存最终页面截图到 {self.screenshot_path}")
                 
                 # 尝试获取积分信息 (不再依赖它判断成功)
                 coin, point = await self.get_credit_info()
@@ -297,7 +318,8 @@ class EnShanPlaywright:
             print(f"::set-output name=status::{result['status']}")
             print(f"::set-output name=message::{msg}")
             
-            if result["status"] == "failed" and os.path.exists(self.screenshot_path):
+            # 强制输出截图路径，无论成功还是失败
+            if os.path.exists(self.screenshot_path):
                 print(f"::set-output name=screenshot_path::{self.screenshot_path}")
             
             print(msg)
