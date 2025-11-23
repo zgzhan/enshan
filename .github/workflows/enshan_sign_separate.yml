@@ -35,7 +35,7 @@ jobs:
         continue-on-error: true
       
       - name: 上传诊断截图
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         # 只有在脚本运行失败，并且脚本输出了截图路径时才执行
         if: always() && steps.run_script.outputs.status == 'failed' && steps.run_script.outputs.screenshot_path != ''
         with:
