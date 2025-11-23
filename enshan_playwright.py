@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-恩山无线论坛自动签到脚本 (Playwright增强诊断版)
+恩山无线论坛自动签到脚本 (Playwright最终优化版)
 """
 
 import os
@@ -18,7 +18,7 @@ urllib3.disable_warnings()
 
 
 class EnShanPlaywright:
-    """恩山论坛自动签到类 (Playwright增强诊断版)"""
+    """恩山论坛自动签到类 (Playwright最终优化版)"""
     
     name = "恩山无线论坛"
     
@@ -99,7 +99,6 @@ class EnShanPlaywright:
             slider = None
             for selector in slider_selectors:
                 try:
-                    # 使用 page.query_selector 而不是 wait_for_selector, 避免长时间等待
                     slider = await self.page.query_selector(selector)
                     if slider:
                         print(f"找到滑块元素: {selector}")
@@ -108,12 +107,10 @@ class EnShanPlaywright:
                     continue
             
             # 默认使用坐标滑动 (更通用)
-            # 验证码弹窗通常在页面中心,我们估算一个坐标
             start_x = 430
             start_y = 464
             
             if slider:
-                # 如果找到滑块元素,使用元素中心坐标
                 box = await slider.bounding_box()
                 if box:
                     start_x = box['x'] + box['width'] / 2
@@ -124,7 +121,6 @@ class EnShanPlaywright:
             await asyncio.sleep(0.2)
             
             # 生成滑动距离和轨迹
-            # 恩山验证码的距离大约在 200-260 像素
             distance = random.randint(220, 260)
             track = self.get_track(distance)
             
@@ -144,7 +140,6 @@ class EnShanPlaywright:
             # 等待验证结果
             await asyncio.sleep(3)
             
-            # 检查是否验证成功
             content = await self.page.content()
             if "安全验证" in content or "Security Verification" in content:
                 print("验证可能失败,需要重试")
@@ -156,6 +151,27 @@ class EnShanPlaywright:
         except Exception as e:
             print(f"滑块验证失败: {e}")
             return False
+            
+    async def get_credit_info(self):
+        """访问个人中心获取积分信息"""
+        try:
+            print("正在访问个人中心获取积分信息...")
+            # 增加超时时间，防止网络延迟
+            await self.page.goto("https://www.right.com.cn/FORUM/home.php?mod=spacecp&ac=credit&showcredit=1", timeout=60000, wait_until='networkidle' )
+            await asyncio.sleep(3)
+            
+            page_source = await self.page.content()
+            
+            coin_match = re.search(r"恩山币[:\s]*</em>([^&<]+)", page_source)
+            point_match = re.search(r"积分[:\s]*</em>([^<]+)", page_source)
+            
+            coin = coin_match.group(1).strip() if coin_match else "未知"
+            point = point_match.group(1).strip() if point_match else "未知"
+            
+            return coin, point
+        except Exception as e:
+            print(f"获取积分信息失败: {e}")
+            return "未知", "未知"
             
     async def sign_in(self):
         """执行签到"""
@@ -223,49 +239,41 @@ class EnShanPlaywright:
                             await buttons[0].click()
                             print(f"点击签到按钮成功: {selector}")
                             sign_button_clicked = True
-                            await asyncio.sleep(2)
+                            # 增加等待时间，等待签到结果弹出或页面跳转
+                            await asyncio.sleep(5) 
                             break
                     except Exception as e:
                         print(f"尝试点击 {selector} 失败: {e}")
                         continue
                 
-                if not sign_button_clicked:
-                    # 如果没有点击到任何按钮，可能是已经签到，或者页面结构变化
-                    print("未找到可点击的签到按钮，尝试直接获取积分信息。")
+                # 签到后，检查页面是否有签到成功的提示（如果有的话）
+                # 恩山论坛签到成功后，页面通常会显示“您今天已经签到过了”或类似信息
                 
-                # 获取签到结果
-                await asyncio.sleep(2)
+                # 重新访问签到页面，检查是否已经签到
+                await self.page.goto("https://www.right.com.cn/FORUM/erling_qd-sign_in.html", wait_until='networkidle' )
+                await asyncio.sleep(3)
                 
-                # 访问个人中心获取积分信息
-                try:
-                    print("正在访问个人中心获取积分信息...")
-                    await self.page.goto("https://www.right.com.cn/FORUM/home.php?mod=spacecp&ac=credit&showcredit=1", wait_until='networkidle' )
-                    await asyncio.sleep(2)
-                    
-                    page_source = await self.page.content()
-                    
-                    coin_match = re.search(r"恩山币[:\s]*</em>([^&<]+)", page_source)
-                    point_match = re.search(r"积分[:\s]*</em>([^<]+)", page_source)
-                    
-                    coin = coin_match.group(1).strip() if coin_match else "未知"
-                    point = point_match.group(1).strip() if point_match else "未知"
-                    
-                    # 检查是否有签到成功的提示（虽然不准确，但作为辅助判断）
-                    # 恩山论坛签到成功后，通常会跳转到积分页面，但没有明确的“签到成功”文字
-                    # 我们主要依赖积分获取
-                    
-                    return {
-                        "status": "success",
-                        "coin": coin,
-                        "point": point
-                    }
-                except Exception as e:
-                    print(f"获取积分信息失败: {e}")
-                    # 即使获取积分失败，也认为签到操作已完成
-                    return {
-                        "status": "success",
-                        "message": "签到操作已执行,但无法获取详细积分信息"
-                    }
+                content = await self.page.content()
+                
+                # 检查是否已经签到
+                if "您今天已经签到过了" in content or "您今日已签到" in content:
+                    print("页面显示已签到，操作成功。")
+                    sign_status = "success"
+                elif "签到" in content and sign_button_clicked:
+                    # 如果点击了签到按钮，但页面仍然显示“签到”按钮，说明签到失败
+                    print("点击签到按钮后，页面仍显示签到按钮，签到可能失败。")
+                    sign_status = "failed"
+                else:
+                    sign_status = "success" # 无法明确判断，暂定成功
+                
+                # 获取积分信息
+                coin, point = await self.get_credit_info()
+                
+                return {
+                    "status": sign_status,
+                    "coin": coin,
+                    "point": point
+                }
                 
         except Exception as e:
             # 发生任何异常时，进行截图
@@ -315,7 +323,7 @@ class EnShanPlaywright:
             
             # 格式化消息
             if result["status"] == "success":
-                if "coin" in result and result["coin"] != "未知":
+                if result["coin"] != "未知":
                     msg = f"签到操作已执行。\n恩山币: {result['coin']}\n积分: {result['point']}"
                 else:
                     msg = result.get("message", "签到操作已执行,但无法确认积分变动。")
