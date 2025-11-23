@@ -34,11 +34,10 @@ jobs:
         # 允许脚本失败，以便执行后续的截图上传步骤
         continue-on-error: true
       
-      - name: 上传诊断截图
+      - name: 上传最终页面截图
         uses: actions/upload-artifact@v4
-        # 只有在脚本运行失败，并且脚本输出了截图路径时才执行
-        if: always() && steps.run_script.outputs.status == 'failed' && steps.run_script.outputs.screenshot_path != ''
+        if: always() # 无论成功还是失败，都上传
         with:
-          name: failure-screenshot-${{ github.run_id }}
-          path: failure_screenshot.png
+          name: final-page-screenshot-${{ github.run_id }}
+          path: final_screenshot.png
           retention-days: 7
