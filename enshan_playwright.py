@@ -1,8 +1,8 @@
+# 请将以下内容保存为 enshan_playwright.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-恩山无线论坛自动签到脚本 (Playwright版本)
-支持滑动拼图验证码识别 - 更稳定和现代化
+恩山无线论坛自动签到脚本 (Playwright增强诊断版)
 """
 
 import os
@@ -18,15 +18,17 @@ urllib3.disable_warnings()
 
 
 class EnShanPlaywright:
-    """恩山论坛自动签到类 (Playwright版本)"""
+    """恩山论坛自动签到类 (Playwright增强诊断版)"""
     
     name = "恩山无线论坛"
     
     def __init__(self):
+        # 从环境变量获取配置
         self.cookie = os.getenv("ENSHAN_COOKIE")
         self.serverchan_key = os.environ.get('SERVERCHAN_KEY')
         self.page = None
         self.browser = None
+        self.screenshot_path = "failure_screenshot.png" # 截图保存路径
         
     def parse_cookies(self):
         """解析Cookie字符串为列表"""
@@ -97,65 +99,47 @@ class EnShanPlaywright:
             slider = None
             for selector in slider_selectors:
                 try:
-                    slider = await self.page.wait_for_selector(selector, timeout=5000)
+                    # 使用 page.query_selector 而不是 wait_for_selector, 避免长时间等待
+                    slider = await self.page.query_selector(selector)
                     if slider:
                         print(f"找到滑块元素: {selector}")
                         break
                 except:
                     continue
             
-            if not slider:
-                print("未找到滑块元素,尝试使用坐标点击")
-                # 如果找不到滑块,尝试在验证码区域点击
-                await self.page.mouse.move(430, 464)
-                await self.page.mouse.down()
-                await asyncio.sleep(0.2)
-                
-                # 生成滑动轨迹
-                distance = random.randint(200, 260)
-                track = self.get_track(distance)
-                
-                # 执行滑动
-                for move in track:
-                    await self.page.mouse.move(
-                        430 + sum(track[:track.index(move)+1]),
-                        464 + random.randint(-2, 2)
-                    )
-                    await asyncio.sleep(random.uniform(0.01, 0.02))
-                
-                await asyncio.sleep(0.5)
-                await self.page.mouse.up()
-                
-            else:
-                # 获取滑块位置
+            # 默认使用坐标滑动 (更通用)
+            # 验证码弹窗通常在页面中心,我们估算一个坐标
+            start_x = 430
+            start_y = 464
+            
+            if slider:
+                # 如果找到滑块元素,使用元素中心坐标
                 box = await slider.bounding_box()
-                if not box:
-                    return False
-                
-                # 移动到滑块中心
-                start_x = box['x'] + box['width'] / 2
-                start_y = box['y'] + box['height'] / 2
-                
-                await self.page.mouse.move(start_x, start_y)
-                await self.page.mouse.down()
-                await asyncio.sleep(0.2)
-                
-                # 生成滑动距离和轨迹
-                distance = random.randint(200, 260)
-                track = self.get_track(distance)
-                
-                # 执行滑动
-                current_x = start_x
-                for move in track:
-                    current_x += move
-                    await self.page.mouse.move(
-                        current_x,
-                        start_y + random.randint(-2, 2)
-                    )
-                    await asyncio.sleep(random.uniform(0.01, 0.02))
-                
-                await asyncio.sleep(0.5)
-                await self.page.mouse.up()
+                if box:
+                    start_x = box['x'] + box['width'] / 2
+                    start_y = box['y'] + box['height'] / 2
+            
+            await self.page.mouse.move(start_x, start_y)
+            await self.page.mouse.down()
+            await asyncio.sleep(0.2)
+            
+            # 生成滑动距离和轨迹
+            # 恩山验证码的距离大约在 200-260 像素
+            distance = random.randint(220, 260)
+            track = self.get_track(distance)
+            
+            # 执行滑动
+            current_x = start_x
+            for move in track:
+                current_x += move
+                await self.page.mouse.move(
+                    current_x,
+                    start_y + random.randint(-2, 2)
+                )
+                await asyncio.sleep(random.uniform(0.01, 0.02))
+            
+            await asyncio.sleep(0.5)
+            await self.page.mouse.up()
             
             # 等待验证结果
             await asyncio.sleep(3)
@@ -204,7 +188,7 @@ class EnShanPlaywright:
                 
                 # 访问签到页面
                 print("正在访问签到页面...")
-                await self.page.goto("https://www.right.com.cn/FORUM/erling_qd-sign_in.html", wait_until='networkidle')
+                await self.page.goto("https://www.right.com.cn/FORUM/erling_qd-sign_in.html", wait_until='networkidle' )
                 await asyncio.sleep(3)
                 
                 # 检查是否需要验证码
@@ -231,24 +215,31 @@ class EnShanPlaywright:
                     '#sign_in'
                 ]
                 
+                sign_button_clicked = False
                 for selector in sign_selectors:
                     try:
-                        button = await self.page.wait_for_selector(selector, timeout=3000)
-                        if button:
-                            await button.click()
-                            print("点击签到按钮成功")
+                        buttons = await self.page.query_selector_all(selector)
+                        if buttons:
+                            await buttons[0].click()
+                            print(f"点击签到按钮成功: {selector}")
+                            sign_button_clicked = True
                             await asyncio.sleep(2)
                             break
-                    except:
+                    except Exception as e:
+                        print(f"尝试点击 {selector} 失败: {e}")
                         continue
+                
+                if not sign_button_clicked:
+                    # 如果没有点击到任何按钮，可能是已经签到，或者页面结构变化
+                    print("未找到可点击的签到按钮，尝试直接获取积分信息。")
                 
                 # 获取签到结果
                 await asyncio.sleep(2)
-                page_source = await self.page.content()
                 
-                # 尝试访问个人中心获取积分信息
+                # 访问个人中心获取积分信息
                 try:
-                    await self.page.goto("https://www.right.com.cn/FORUM/home.php?mod=spacecp&ac=credit&showcredit=1", wait_until='networkidle')
+                    print("正在访问个人中心获取积分信息...")
+                    await self.page.goto("https://www.right.com.cn/FORUM/home.php?mod=spacecp&ac=credit&showcredit=1", wait_until='networkidle' )
                     await asyncio.sleep(2)
                     
                     page_source = await self.page.content()
@@ -259,6 +250,10 @@ class EnShanPlaywright:
                     coin = coin_match.group(1).strip() if coin_match else "未知"
                     point = point_match.group(1).strip() if point_match else "未知"
                     
+                    # 检查是否有签到成功的提示（虽然不准确，但作为辅助判断）
+                    # 恩山论坛签到成功后，通常会跳转到积分页面，但没有明确的“签到成功”文字
+                    # 我们主要依赖积分获取
+                    
                     return {
                         "status": "success",
                         "coin": coin,
@@ -266,12 +261,18 @@ class EnShanPlaywright:
                     }
                 except Exception as e:
                     print(f"获取积分信息失败: {e}")
+                    # 即使获取积分失败，也认为签到操作已完成
                     return {
                         "status": "success",
-                        "message": "签到可能成功,但无法获取详细信息"
+                        "message": "签到操作已执行,但无法获取详细积分信息"
                     }
                 
         except Exception as e:
+            # 发生任何异常时，进行截图
+            if self.page:
+                await self.page.screenshot(path=self.screenshot_path)
+                print(f"发生异常，已保存截图到 {self.screenshot_path}")
+            
             return {
                 "status": "failed",
                 "message": f"签到失败: {str(e)}"
@@ -294,7 +295,7 @@ class EnShanPlaywright:
                 f'https://sctapi.ftqq.com/{self.serverchan_key}.send',
                 data=data,
                 timeout=10
-            )
+             )
             if response.status_code == 200:
                 print('推送成功')
             else:
@@ -305,7 +306,8 @@ class EnShanPlaywright:
     def main(self):
         """主函数"""
         if not self.cookie:
-            return "未找到恩山论坛的 Cookie,请设置 ENSHAN_COOKIE 环境变量。"
+            print("未找到恩山论坛的 Cookie,请设置 ENSHAN_COOKIE 环境变量。")
+            return
         
         try:
             # 执行签到
@@ -313,10 +315,10 @@ class EnShanPlaywright:
             
             # 格式化消息
             if result["status"] == "success":
-                if "coin" in result:
-                    msg = f"签到成功!\n恩山币: {result['coin']}\n积分: {result['point']}"
+                if "coin" in result and result["coin"] != "未知":
+                    msg = f"签到操作已执行。\n恩山币: {result['coin']}\n积分: {result['point']}"
                 else:
-                    msg = result.get("message", "签到成功")
+                    msg = result.get("message", "签到操作已执行,但无法确认积分变动。")
             else:
                 msg = result.get("message", "签到失败")
             
@@ -324,15 +326,22 @@ class EnShanPlaywright:
             if self.serverchan_key:
                 self.push_notification(msg)
             
-            return msg
+            # 打印结果，供GitHub Actions日志使用
+            print(f"::set-output name=status::{result['status']}")
+            print(f"::set-output name=message::{msg}")
+            
+            # 如果失败，则打印截图路径
+            if result["status"] == "failed" and os.path.exists(self.screenshot_path):
+                print(f"::set-output name=screenshot_path::{self.screenshot_path}")
+            
+            print(msg)
             
         except Exception as e:
             error_msg = f"执行出错: {str(e)}"
             if self.serverchan_key:
                 self.push_notification(error_msg)
-            return error_msg
+            print(error_msg)
 
 
 if __name__ == "__main__":
-    result = EnShanPlaywright().main()
-    print(result)
+    EnShanPlaywright().main()
